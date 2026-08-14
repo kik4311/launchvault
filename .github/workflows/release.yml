@@ -21,11 +21,10 @@ jobs:
             libgdk-pixbuf-2.0-dev pkg-config
       - name: Build
         run: cargo build --release
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
       - name: Create deb
-        uses: kornelski/cargo-deb@v1
-        with:
-          no-build: true
-          output: target/debian
+        run: cargo deb --no-build --output target/debian
       - name: Create rpm
         run: cargo generate-rpm
       - name: Upload Linux artifacts
@@ -52,8 +51,7 @@ jobs:
             mingw-w64-x86_64-gtk4
             mingw-w64-x86_64-libadwaita
             mingw-w64-x86_64-pkg-config
-      - name: Install cargo-wix
-        run: cargo install cargo-wix
+            mingw-w64-x86_64-wixl
       - name: Build
         run: cargo build --release
       - name: Create MSI
