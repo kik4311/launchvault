@@ -208,7 +208,7 @@ impl LaunchVaultApp {
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::Image::new(egui::include_image!("launchvault_icon.png"))
-                            .max_size(egui::vec2(48.0, 48.0)),
+                            .max_size(egui::vec2(64.0, 64.0)),
                     );
                     ui.vertical(|ui| {
                         ui.add_space(4.0);
