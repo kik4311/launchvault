@@ -122,11 +122,13 @@ jobs:
         with:
           name: launchvault-linux
           path: artifacts/linux
+          merge-multiple: true
       - name: Download Windows cross artifacts
         uses: actions/download-artifact@v4
         with:
           name: launchvault-windows-cross
           path: artifacts/windows-cross
+          merge-multiple: true
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
