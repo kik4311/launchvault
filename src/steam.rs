@@ -5,11 +5,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(target_os = "windows")]
-use winreg::enums::*;
-#[cfg(target_os = "windows")]
-use winreg::RegKey;
-
 #[derive(Debug, Clone)]
 pub struct SteamGame {
     pub appid: u64,
@@ -62,7 +57,7 @@ pub fn find_steam_root() -> Option<PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn steam_path_from_registry() -> Option<PathBuf> {
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let hklm = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
     let key = hklm.open_subkey(r"SOFTWARE\WOW6432Node\Valve\Steam").ok()?;
     let path: String = key.get_value("InstallPath").ok()?;
     Some(PathBuf::from(path))
@@ -201,6 +196,11 @@ fn download_file(url: &str, dest: &std::path::Path) -> Option<PathBuf> {
     }
     fs::write(dest, bytes).ok()?;
     Some(dest.to_path_buf())
+}
+
+/// Скачать произвольный URL (например, кастомную обложку) в файл.
+pub fn download_to_file(url: &str, dest: &std::path::Path) -> Option<PathBuf> {
+    download_file(url, dest)
 }
 
 pub fn open_url(url: &str) {

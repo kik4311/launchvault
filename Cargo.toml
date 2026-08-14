@@ -1,6 +1,6 @@
 [package]
 name = "launchvault"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Персональный игровой центр для Linux и Windows"
 license = "GPL-3.0"
@@ -10,36 +10,29 @@ readme = "README.md"
 categories = ["command-line-utilities", "desktop-environment"]
 keywords = ["games", "steam", "launcher", "linux", "windows"]
 
-[dependencies]
-dirs = "6.0.0"
-eframe = { version = "0.36.1", default-features = false, features = [
-    "glow",
-    "default_fonts",
-    "accesskit",
-    "links",
-    "wayland",
-    "x11",
-] }
-egui_extras = { version = "0.36.1", features = ["image", "file"] }
-env_logger = "0.11.11"
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "ico", "tiff"] }
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-ureq = "3.4.0"
-uuid = { version = "1.24.0", features = ["v4", "serde"] }
-winreg = { version = "0.54", optional = true }
-
-[features]
-default = []
-windows = ["winreg"]
-
-[target.'cfg(windows)'.dependencies]
-winreg = "0.54"
-window-vibrancy = "0.6"
+[lib]
+name = "launchvault_core"
+path = "src/lib.rs"
 
 [[bin]]
 name = "launchvault"
 path = "src/main.rs"
+
+[dependencies]
+dirs = "6.0.0"
+env_logger = "0.11.11"
+glib = "0.22"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+ureq = "3.4.0"
+uuid = { version = "1.24.0", features = ["v4", "serde"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { package = "gtk4", version = "0.11", features = ["v4_20"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_8"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.54"
 
 [profile.release]
 lto = true
@@ -51,7 +44,7 @@ opt-level = 3
 maintainer = "kik4311 <kik4311@users.noreply.github.com>"
 section = "games"
 priority = "optional"
-depends = ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "librsvg2-2"]
+depends = ["libgtk-4-1", "libadwaita-1-0"]
 assets = [
     ["target/release/launchvault", "usr/bin/", "755"],
     { source = "src/launchvault.desktop", dest = "/usr/share/applications/launchvault.desktop" },
@@ -68,10 +61,3 @@ assets = [
     { source = "src/launchvault.desktop", dest = "/usr/share/applications/launchvault.desktop", mode = "644" },
     { source = "src/launchvault.svg", dest = "/usr/share/icons/hicolor/scalable/apps/launchvault.svg", mode = "644" },
 ]
-
-# cargo-wix config
-[package.metadata.wix]
-manufacturer = "kik4311"
-upgrade_code = "{12345678-1234-1234-1234-123456789012}"
-license_file = "LICENSE"
-template = "wix/main.wxs"
