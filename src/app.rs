@@ -205,11 +205,20 @@ impl LaunchVaultApp {
             .default_size(220.0)
             .show(ui, |ui| {
                 ui.add_space(10.0);
-                ui.label(egui::RichText::new("LaunchVault").size(22.0).strong());
-                ui.colored_label(
-                    egui::Color32::from_rgb(100, 180, 255),
-                    egui::RichText::new("персональный игровой центр").small().weak(),
-                );
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Image::new(egui::include_image!("launchvault_icon.png"))
+                            .max_size(egui::vec2(48.0, 48.0)),
+                    );
+                    ui.vertical(|ui| {
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new("LaunchVault").size(22.0).strong());
+                        ui.colored_label(
+                            egui::Color32::from_rgb(100, 180, 255),
+                            egui::RichText::new("персональный игровой центр").small().weak(),
+                        );
+                    });
+                });
                 ui.add_space(16.0);
 
                 let items = [

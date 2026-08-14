@@ -8,6 +8,18 @@ mod vdf;
 
 use app::LaunchVaultApp;
 use eframe::egui;
+use std::sync::Arc;
+
+fn load_icon() -> Arc<egui::IconData> {
+    let png = include_bytes!("launchvault_icon.png");
+    let img = image::load_from_memory(png).expect("failed to decode icon").to_rgba8();
+    let (width, height) = img.dimensions();
+    Arc::new(egui::IconData {
+        rgba: img.into_raw(),
+        width,
+        height,
+    })
+}
 
 fn main() -> eframe::Result {
     env_logger::Builder::from_env(env_logger::Env::default()        .default_filter_or("warn,egui_extras=trace,egui=info"))
@@ -17,7 +29,8 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_title("LaunchVault")
             .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([900.0, 600.0]),
+            .with_min_inner_size([900.0, 600.0])
+            .with_icon(load_icon()),
         ..Default::default()
     };
     eframe::run_native(
