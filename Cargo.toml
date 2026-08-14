@@ -52,20 +52,20 @@ section = "games"
 priority = "optional"
 depends = ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "librsvg2-2"]
 assets = [
-    { path = "src/launchvault.desktop", dest = "/usr/share/applications/launchvault.desktop" },
-    { path = "src/launchvault.svg", dest = "/usr/share/icons/hicolor/scalable/apps/launchvault.svg" },
+    ["target/release/launchvault", "usr/bin/", "755"],
+    { source = "src/launchvault.desktop", dest = "/usr/share/applications/launchvault.desktop" },
+    { source = "src/launchvault.svg", dest = "/usr/share/icons/hicolor/scalable/apps/launchvault.svg" },
 ]
 
-# cargo-rpm config
-[package.metadata.rpm]
+# cargo-generate-rpm config
+[package.metadata.generate-rpm]
 summary = "Персональный игровой центр для Linux"
 license = "GPL-3.0"
 group = "Applications/Games"
-requires = ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "librsvg2-2"]
-files = [
-    "/usr/bin/launchvault = { mode = 0o755 }",
-    "/usr/share/applications/launchvault.desktop = { mode = 0o644 }",
-    "/usr/share/icons/hicolor/scalable/apps/launchvault.svg = { mode = 0o644 }",
+assets = [
+    { source = "target/release/launchvault", dest = "/usr/bin/launchvault", mode = "755" },
+    { source = "src/launchvault.desktop", dest = "/usr/share/applications/launchvault.desktop", mode = "644" },
+    { source = "src/launchvault.svg", dest = "/usr/share/icons/hicolor/scalable/apps/launchvault.svg", mode = "644" },
 ]
 
 # cargo-wix config

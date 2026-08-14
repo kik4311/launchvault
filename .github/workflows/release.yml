@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -33,8 +33,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install cargo-deb
         run: cargo install cargo-deb
-      - name: Install cargo-rpm
-        run: cargo install cargo-rpm
+      - name: Install cargo-generate-rpm
+        run: cargo install cargo-generate-rpm
       - name: Install linuxdeploy
         run: |
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O linuxdeploy
@@ -63,7 +63,7 @@ jobs:
       - name: Build deb package
         run: cargo deb --no-build --output target/debian
       - name: Build rpm package
-        run: cargo rpm build -bb --define '_topdir %{getenv:PWD}/target/rpm' --define '_rpmdir %{_topdir}'
+        run: cargo generate-rpm
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -71,7 +71,7 @@ jobs:
           path: |
             LaunchVault-*.AppImage
             target/debian/*.deb
-            target/rpm/RPMS/x86_64/*.rpm
+            target/generate-rpm/*.rpm
 
   build-windows-cross:
     name: Build Windows cross (MinGW, exe)
@@ -81,7 +81,7 @@ jobs:
       - name: Install mingw-w64
         run: |
           sudo apt-get update
-          sudo apt-get install -y mingw-w64
+          sudo apt-get install -y mingw-w64 msitools
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -97,51 +97,24 @@ jobs:
           key: ${{ runner.os }}-cargo-mingw-${{ hashFiles('**/Cargo.lock') }}
       - name: Build (cross-compile)
         run: cargo build --release --target x86_64-pc-windows-gnu
+      - name: Build MSI installer
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p target/release
+          cp target/x86_64-pc-windows-gnu/release/launchvault.exe target/release/launchvault.exe
+          sed "s/Version=\"0.1.0\"/Version=\"$VERSION\"/" wix/main.wxs > target/wix-main.wxs
+          wixl target/wix-main.wxs -o target/release/launchvault.msi
       - name: Upload Windows cross artifact
         uses: actions/upload-artifact@v4
         with:
           name: launchvault-windows-cross
-          path: target/x86_64-pc-windows-gnu/release/launchvault.exe
-
-  build-windows:
-    name: Build Windows native (MSVC, exe + MSI)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install WiX Toolset
-        run: |
-          choco install wixtoolset -y --version 3.11.2
-          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          target: x86_64-pc-windows-msvc
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            target/
-          key: ${{ runner.os }}-cargo-msvc-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install cargo-wix
-        run: cargo install cargo-wix
-      - name: Build
-        run: cargo build --release
-      - name: Build MSI installer
-        run: cargo wix --package launchvault
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: launchvault-windows
-          path: |
-            target/release/launchvault.exe
-            target/wix/*.msi
+            target/x86_64-pc-windows-gnu/release/launchvault.exe
+            target/release/launchvault.msi
 
   release:
     name: Create Release
-    needs: [build-linux, build-windows-cross, build-windows]
+    needs: [build-linux, build-windows-cross]
     runs-on: ubuntu-latest
     steps:
       - name: Download Linux artifacts
@@ -154,11 +127,6 @@ jobs:
         with:
           name: launchvault-windows-cross
           path: artifacts/windows-cross
-      - name: Download Windows native artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: launchvault-windows
-          path: artifacts/windows
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -167,6 +135,5 @@ jobs:
             artifacts/linux/*.deb
             artifacts/linux/*.rpm
             artifacts/windows-cross/launchvault.exe
-            artifacts/windows/launchvault.exe
-            artifacts/windows/*.msi
+            artifacts/windows-cross/*.msi
           generate_release_notes: true
