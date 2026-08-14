@@ -23,6 +23,8 @@ struct AddGameDraft {
 struct Session {
     game_id: String,
     started: u64,
+    child: Option<std::process::Child>,
+    kill_names: Vec<String>,
 }
 
 pub struct LaunchVaultApp {
@@ -32,6 +34,7 @@ pub struct LaunchVaultApp {
     selected: Option<String>,
     add_dialog: Option<AddGameDraft>,
     session: Option<Session>,
+    confirm_kill: Option<String>,
     steam_games: Vec<SteamGame>,
     steam_error: Option<String>,
     last_save: f64,
@@ -66,6 +69,7 @@ impl LaunchVaultApp {
             selected: None,
             add_dialog: None,
             session: None,
+            confirm_kill: None,
             steam_games,
             steam_error,
             last_save: 0.0,
@@ -84,6 +88,11 @@ impl LaunchVaultApp {
         if let Some(s) = self.session.take() {
             let now = now_secs();
             let dur = now.saturating_sub(s.started);
+            if let Some(mut child) = s.child {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            kill_process(&s.kill_names);
             if let Some(g) = self.data.games.iter_mut().find(|g| g.id == s.game_id) {
                 g.playtime_sec += dur;
                 g.last_played = Some(s.started);
@@ -119,21 +128,30 @@ impl LaunchVaultApp {
         let Some(game) = self.data.games.iter().find(|g| g.id == id).cloned() else {
             return;
         };
+        let mut child = None;
+        let mut kill_names = Vec::new();
         match game.source {
             Source::Steam => {
                 if let Some(appid) = game.steam_id {
                     launch_steam_game(appid);
+                    if let Some(root) = self.data.steam_path.clone().map(PathBuf::from) {
+                        if root.join("steamapps").is_dir() {
+                            kill_names = steam_game_process_names(&root, appid);
+                        }
+                    }
                 }
             }
             Source::Local => {
                 if let Some(p) = &game.path {
-                    let _ = launch_local(p, &game.args);
+                    child = launch_local(p, &game.args);
                 }
             }
         }
         self.session = Some(Session {
             game_id: id.to_string(),
             started: now_secs(),
+            child,
+            kill_names,
         });
     }
 
@@ -212,8 +230,9 @@ impl LaunchVaultApp {
                                     .color(egui::Color32::from_rgb(120, 220, 120)),
                             );
                             ui.add_space(4.0);
+                            let gid = s.game_id.clone();
                             if ui.button("Остановить сессию").clicked() {
-                                self.stop_session();
+                                self.confirm_kill = Some(gid);
                             }
                         }
                     }
@@ -411,7 +430,7 @@ impl LaunchVaultApp {
                         self.launch_game(&game.id);
                     }
                     if ui.button("Стоп").clicked() {
-                        self.stop_session();
+                        self.confirm_kill = Some(game.id.clone());
                     }
                 });
                 ui.add_space(8.0);
@@ -493,7 +512,12 @@ impl LaunchVaultApp {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if added {
                                 if ui.button("Запустить").clicked() {
-                                    launch_steam_game(sg.appid);
+                                    let gid = format!("steam-{}", sg.appid);
+                                    if self.data.games.iter().any(|g| g.id == gid) {
+                                        self.launch_game(&gid);
+                                    } else {
+                                        launch_steam_game(sg.appid);
+                                    }
                                 }
                                 ui.label(egui::RichText::new("в библиотеке").weak().small());
                             } else if ui.button("+ Добавить").clicked() {
@@ -674,6 +698,55 @@ impl LaunchVaultApp {
             self.add_dialog = None;
         }
     }
+
+    fn show_confirm_kill(&mut self, ui: &mut egui::Ui) {
+        let Some(game_id) = self.confirm_kill.clone() else {
+            return;
+        };
+        let game_name = self
+            .data
+            .games
+            .iter()
+            .find(|g| g.id == game_id)
+            .map(|g| g.name.clone())
+            .unwrap_or_else(|| "Игра".to_string());
+        let mut open = true;
+        let mut confirm = false;
+        let mut cancel = false;
+        egui::Window::new("Принудительное завершение")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+            .open(&mut open)
+            .show(ui.ctx(), |ui| {
+                ui.label(egui::RichText::new(format!("Завершить «{game_name}»?")).strong());
+                ui.add_space(4.0);
+                ui.label("Процесс игры будет принудительно закрыт.");
+                ui.colored_label(
+                    egui::Color32::from_rgb(230, 160, 80),
+                    "Несохранённый прогресс может быть потерян!",
+                );
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(egui::RichText::new("Да, завершить").color(egui::Color32::from_rgb(230, 120, 120)))
+                        .clicked()
+                    {
+                        confirm = true;
+                    }
+                    if ui.button("Отмена").clicked() {
+                        cancel = true;
+                    }
+                });
+            });
+        if confirm {
+            self.stop_session();
+            self.confirm_kill = None;
+        }
+        if cancel || !open {
+            self.confirm_kill = None;
+        }
+    }
 }
 
 impl eframe::App for LaunchVaultApp {
@@ -699,9 +772,12 @@ impl eframe::App for LaunchVaultApp {
         if self.add_dialog.is_some() {
             self.show_add_dialog(ui);
         }
+        if self.confirm_kill.is_some() {
+            self.show_confirm_kill(ui);
+        }
     }
 
-    fn on_exit(&mut self) {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.save();
     }
 }

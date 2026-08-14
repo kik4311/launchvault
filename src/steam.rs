@@ -181,6 +181,75 @@ pub fn launch_local(path: &str, args: &Option<String>) -> Option<std::process::C
     cmd.spawn().ok()
 }
 
+/// Имена исполняемых файлов установленной Steam-игры (для завершения процесса).
+/// Возвращает уникальные имена процессов + installdir как fallback-цель.
+pub fn steam_game_process_names(steam_root: &Path, appid: u64) -> Vec<String> {
+    let mut names = Vec::new();
+    for g in installed_games(steam_root) {
+        if g.appid != appid {
+            continue;
+        }
+        let exe_dir = g.library.join("steamapps").join("common").join(&g.installdir);
+        names.push(g.installdir.clone());
+        collect_executables(&exe_dir, 3, &mut names);
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn collect_executables(dir: &Path, depth: u32, out: &mut Vec<String>) {
+    if depth == 0 {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if path.is_dir() {
+            if name == "bin" || name == "linux64" || name == "game" || name == "scripts" {
+                collect_executables(&path, depth - 1, out);
+            }
+            continue;
+        }
+        let is_exe = path
+            .extension()
+            .map(|e| e == "exe" || e == "sh" || e == "bin" || e == "x86_64" || e == "run")
+            .unwrap_or(false);
+        let has_exec_bit = {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                path.metadata()
+                    .map(|m| m.permissions().mode() & 0o111 != 0)
+                    .unwrap_or(false)
+            }
+            #[cfg(not(unix))]
+            {
+                false
+            }
+        };
+        if is_exe || has_exec_bit {
+            out.push(name);
+        }
+    }
+}
+
+/// Завершить процесс по имени (Unix: pkill -f; Windows: taskkill).
+pub fn kill_process(names: &[String]) {
+    if names.is_empty() {
+        return;
+    }
+    for name in names {
+        #[cfg(target_os = "windows")]
+        let _ = Command::new("taskkill").args(["/IM", name, "/F"]).spawn();
+        #[cfg(not(target_os = "windows"))]
+        let _ = Command::new("pkill").arg("-f").arg(name).spawn();
+    }
+}
+
 pub fn size_readable(bytes: u64) -> String {
     const GB: u64 = 1024 * 1024 * 1024;
     const MB: u64 = 1024 * 1024;
