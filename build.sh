@@ -11,7 +11,7 @@ mkdir -p target/release target/debian target/generate-rpm
 echo "==> Linux бинарник (release) =="
 cargo build --release
 
-echo "==> Windows exe (MinGW кросс) =="
+echo "==> Windows exe (MinGW кросс, нужен для MSI) =="
 cargo build --release --target x86_64-pc-windows-gnu
 cp target/x86_64-pc-windows-gnu/release/launchvault.exe target/release/launchvault.exe
 
@@ -46,5 +46,4 @@ echo "==> Готово! Артефакты:"
 ls -lh LaunchVault-x86_64.AppImage \
       target/debian/*.deb \
       target/generate-rpm/*.rpm \
-      target/release/launchvault.exe \
       target/release/launchvault.msi
