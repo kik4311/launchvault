@@ -2,6 +2,13 @@
 name = "launchvault"
 version = "0.1.0"
 edition = "2024"
+description = "Персональный игровой центр для Linux и Windows"
+license = "GPL-3.0"
+repository = "https://github.com/kik4311/launchvault"
+homepage = "https://github.com/kik4311/launchvault"
+readme = "README.md"
+categories = ["command-line-utilities", "desktop-environment"]
+keywords = ["games", "steam", "launcher", "linux", "windows"]
 
 [dependencies]
 dirs = "6.0.0"
@@ -23,3 +30,42 @@ uuid = { version = "1.24.0", features = ["v4", "serde"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.54"
+
+[[bin]]
+name = "launchvault"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 3
+
+# cargo-deb config
+[package.metadata.deb]
+maintainer = "kik4311 <kik4311@users.noreply.github.com>"
+section = "games"
+priority = "optional"
+depends = ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "librsvg2-2"]
+assets = [
+    { path = "src/launchvault.desktop", dest = "/usr/share/applications/launchvault.desktop" },
+    { path = "src/launchvault.svg", dest = "/usr/share/icons/hicolor/scalable/apps/launchvault.svg" },
+]
+
+# cargo-rpm config
+[package.metadata.rpm]
+summary = "Персональный игровой центр для Linux"
+license = "GPL-3.0"
+group = "Applications/Games"
+requires = ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "librsvg2-2"]
+files = [
+    "/usr/bin/launchvault = { mode = 0o755 }",
+    "/usr/share/applications/launchvault.desktop = { mode = 0o644 }",
+    "/usr/share/icons/hicolor/scalable/apps/launchvault.svg = { mode = 0o644 }",
+]
+
+# cargo-wix config
+[package.metadata.wix]
+manufacturer = "kik4311"
+upgrade_code = "{12345678-1234-1234-1234-123456789012}"
+license_file = "LICENSE"
+template = "wix/main.wxs"

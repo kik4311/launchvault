@@ -10,14 +10,14 @@ permissions:
 
 jobs:
   build-linux:
-    name: Build Linux (AppImage)
+    name: Build Linux (AppImage, deb, rpm)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -31,14 +31,18 @@ jobs:
             ~/.cargo/registry/cache/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Build
-        run: cargo build --release
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+      - name: Install cargo-rpm
+        run: cargo install cargo-rpm
       - name: Install linuxdeploy
         run: |
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O linuxdeploy
           chmod +x linuxdeploy
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage -O linuxdeploy-plugin-appimage
           chmod +x linuxdeploy-plugin-appimage
+      - name: Build
+        run: cargo build --release
       - name: Create AppImage
         run: |
           mkdir -p AppDir/usr/bin
@@ -56,14 +60,51 @@ jobs:
           EOF
           cp AppDir/launchvault.svg AppDir/launchvault.png 2>/dev/null || true
           ./linuxdeploy --appdir AppDir --output appimage
-      - name: Upload Linux artifact
+      - name: Build deb package
+        run: cargo deb --no-build --output target/debian
+      - name: Build rpm package
+        run: cargo rpm build -bb --define '_topdir %{getenv:PWD}/target/rpm' --define '_rpmdir %{_topdir}'
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: launchvault-linux
-          path: LaunchVault-*.AppImage
+          path: |
+            LaunchVault-*.AppImage
+            target/debian/*.deb
+            target/rpm/RPMS/x86_64/*.rpm
+
+  build-windows-cross:
+    name: Build Windows cross (MinGW, exe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mingw-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: x86_64-pc-windows-gnu
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            target/
+          key: ${{ runner.os }}-cargo-mingw-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build (cross-compile)
+        run: cargo build --release --target x86_64-pc-windows-gnu
+      - name: Upload Windows cross artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: launchvault-windows-cross
+          path: target/x86_64-pc-windows-gnu/release/launchvault.exe
 
   build-windows:
-    name: Build Windows (exe)
+    name: Build Windows native (MSVC, exe + MSI)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,26 +120,37 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-msvc-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install cargo-wix
+        run: cargo install cargo-wix
       - name: Build
         run: cargo build --release
-      - name: Upload Windows artifact
+      - name: Build MSI installer
+        run: cargo wix --package launchvault
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: launchvault-windows
-          path: target/release/launchvault.exe
+          path: |
+            target/release/launchvault.exe
+            target/wix/*.msi
 
   release:
     name: Create Release
-    needs: [build-linux, build-windows]
+    needs: [build-linux, build-windows-cross, build-windows]
     runs-on: ubuntu-latest
     steps:
-      - name: Download Linux artifact
+      - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
           name: launchvault-linux
           path: artifacts/linux
-      - name: Download Windows artifact
+      - name: Download Windows cross artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: launchvault-windows-cross
+          path: artifacts/windows-cross
+      - name: Download Windows native artifacts
         uses: actions/download-artifact@v4
         with:
           name: launchvault-windows
@@ -108,5 +160,9 @@ jobs:
         with:
           files: |
             artifacts/linux/LaunchVault-*.AppImage
+            artifacts/linux/*.deb
+            artifacts/linux/*.rpm
+            artifacts/windows-cross/launchvault.exe
             artifacts/windows/launchvault.exe
+            artifacts/windows/*.msi
           generate_release_notes: true

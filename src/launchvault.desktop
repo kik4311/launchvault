@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=LaunchVault
+GenericName=Game Launcher
+Comment=Персональный игровой центр для Linux и Windows
+Exec=launchvault
+Icon=launchvault
+Categories=Game;
+StartupNotify=true
+Terminal=false
