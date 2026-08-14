@@ -61,10 +61,49 @@ impl Game {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UmuConfig {
+    pub enabled: bool,
+    pub umu_run: String,
+    pub proton_path: String,
+    pub store: String,
+    pub game_id: String,
+    pub wineprefix: String,
+}
+
+impl Default for UmuConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            umu_run: "umu-run".to_string(),
+            proton_path: String::new(),
+            store: "steam".to_string(),
+            game_id: String::new(),
+            wineprefix: String::new(),
+        }
+    }
+}
+
+impl UmuConfig {
+    /// GAMEID для umu-run: заданный вручную или сгенерированный.
+    pub fn effective_game_id(&self, fallback: &str) -> String {
+        let id = self.game_id.trim();
+        if id.is_empty() {
+            format!("umu-{fallback}")
+        } else {
+            id.to_string()
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppData {
     pub games: Vec<Game>,
     pub steam_path: Option<String>,
     pub steam_cached: bool,
+    pub theme: String,
+    pub dark_mode: bool,
+    pub umu: UmuConfig,
 }
 
 impl Default for AppData {
@@ -73,6 +112,9 @@ impl Default for AppData {
             games: Vec::new(),
             steam_path: None,
             steam_cached: false,
+            theme: "auto".to_string(),
+            dark_mode: true,
+            umu: UmuConfig::default(),
         }
     }
 }

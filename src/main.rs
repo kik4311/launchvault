@@ -4,6 +4,7 @@ mod app;
 mod models;
 mod steam;
 mod storage;
+mod theme;
 mod vdf;
 
 use app::LaunchVaultApp;
@@ -25,13 +26,19 @@ fn main() -> eframe::Result {
     env_logger::Builder::from_env(env_logger::Env::default()        .default_filter_or("warn,egui_extras=trace,egui=info"))
         .format_timestamp(None)
         .init();
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_app_id("launchvault")
+        .with_title("LaunchVault")
+        .with_inner_size([1280.0, 800.0])
+        .with_min_inner_size([900.0, 600.0])
+        .with_icon(load_icon());
+    #[cfg(target_os = "windows")]
+    {
+        viewport = viewport.with_transparent(true);
+    }
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_app_id("launchvault")
-            .with_title("LaunchVault")
-            .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([900.0, 600.0])
-            .with_icon(load_icon()),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(

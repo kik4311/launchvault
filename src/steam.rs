@@ -228,6 +228,95 @@ pub fn launch_local(path: &str, args: &Option<String>) -> Option<std::process::C
     cmd.spawn().ok()
 }
 
+/// Запуск Windows-игры (.exe) через umu-launcher (Proton).
+/// Использует env: PROTONPATH, GAMEID, STORE, WINEPREFIX.
+pub fn launch_local_umu(
+    path: &str,
+    args: &Option<String>,
+    cfg: &crate::models::UmuConfig,
+    fallback_game_id: &str,
+) -> Option<std::process::Child> {
+    let mut cmd = Command::new(cfg.umu_run.trim());
+    if !cfg.proton_path.trim().is_empty() {
+        cmd.env("PROTONPATH", cfg.proton_path.trim());
+    }
+    if !cfg.store.trim().is_empty() {
+        cmd.env("STORE", cfg.store.trim());
+    }
+    if !cfg.wineprefix.trim().is_empty() {
+        cmd.env("WINEPREFIX", cfg.wineprefix.trim());
+    }
+    cmd.env("GAMEID", cfg.effective_game_id(fallback_game_id));
+    cmd.arg(path);
+    if let Some(a) = args {
+        for arg in a.split_whitespace() {
+            cmd.arg(arg);
+        }
+    }
+    cmd.spawn().ok()
+}
+
+/// Найти установленный Proton: compatibilitytools.d или steamapps/common/Proton*.
+pub fn find_proton_root() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    let home = dirs::home_dir()?;
+    let mut add = |p: PathBuf| {
+        if p.is_dir() {
+            candidates.push(p);
+        }
+    };
+    for base in [
+        home.join(".steam").join("root").join("compatibilitytools.d"),
+        home.join(".steam").join("steam").join("compatibilitytools.d"),
+        home.join(".local").join("share").join("Steam").join("compatibilitytools.d"),
+    ] {
+        if let Ok(rd) = fs::read_dir(&base) {
+            for entry in rd.flatten() {
+                let p = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+                if p.is_dir() && name.to_lowercase().contains("proton") {
+                    add(p);
+                }
+            }
+        }
+    }
+    for base in [
+        home.join(".local").join("share").join("Steam").join("steamapps").join("common"),
+        home.join(".steam").join("steam").join("steamapps").join("common"),
+    ] {
+        if let Ok(rd) = fs::read_dir(&base) {
+            for entry in rd.flatten() {
+                let p = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+                if p.is_dir() && name.starts_with("Proton") {
+                    add(p);
+                }
+            }
+        }
+    }
+    candidates.sort();
+    candidates.into_iter().next()
+}
+
+/// Найти umu-run: в PATH или ~/.local/bin.
+pub fn find_umu_run() -> Option<PathBuf> {
+    if let Ok(paths) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&paths) {
+            let p = dir.join("umu-run");
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+    let home = dirs::home_dir()?;
+    let p = home.join(".local").join("bin").join("umu-run");
+    if p.is_file() {
+        Some(p)
+    } else {
+        None
+    }
+}
+
 /// Имена исполняемых файлов установленной Steam-игры (для завершения процесса).
 /// Возвращает уникальные имена процессов + installdir как fallback-цель.
 pub fn steam_game_process_names(steam_root: &Path, appid: u64) -> Vec<String> {

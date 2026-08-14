@@ -1,6 +1,7 @@
 use crate::models::*;
 use crate::steam::*;
 use crate::storage;
+use crate::theme::{self, ThemeKind, ThemePreset};
 use eframe::egui;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -39,14 +40,16 @@ pub struct LaunchVaultApp {
     steam_error: Option<String>,
     steam_logos_queued: HashSet<u64>,
     last_save: f64,
-    dark_mode: bool,
+    mica_dirty: bool,
 }
 
 impl LaunchVaultApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        cc.egui_ctx.set_visuals(egui::Visuals::dark());
         storage::ensure_dirs();
         let mut data = storage::load();
+
+        let preset = ThemeKind::from_name(&data.theme).detect(data.dark_mode);
+        cc.egui_ctx.set_visuals(theme::visuals(preset));
 
         let mut steam_games = Vec::new();
         let mut steam_error = None;
@@ -75,7 +78,39 @@ impl LaunchVaultApp {
             steam_error,
             steam_logos_queued: HashSet::new(),
             last_save: 0.0,
-            dark_mode: true,
+            mica_dirty: true,
+        }
+    }
+
+    fn theme_kind(&self) -> ThemeKind {
+        ThemeKind::from_name(&self.data.theme)
+    }
+
+    fn preset(&self) -> ThemePreset {
+        self.theme_kind().detect(self.data.dark_mode)
+    }
+
+    fn apply_theme(&mut self, ctx: &egui::Context) {
+        let preset = self.preset();
+        self.mica_dirty = true;
+        ctx.set_visuals(theme::visuals(preset));
+        ctx.request_repaint();
+    }
+
+    fn maybe_apply_mica(&mut self, frame: &eframe::Frame) {
+        #[cfg(target_os = "windows")]
+        {
+            if self.mica_dirty {
+                if let Some(window) = frame.winit_window() {
+                    let _ = window_vibrancy::apply_mica(window, Some(self.data.dark_mode));
+                    self.mica_dirty = false;
+                }
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = frame;
+            self.mica_dirty = false;
         }
     }
 
@@ -163,7 +198,12 @@ impl LaunchVaultApp {
             }
             Source::Local => {
                 if let Some(p) = &game.path {
-                    child = launch_local(p, &game.args);
+                    let is_exe = p.trim().to_lowercase().ends_with(".exe");
+                    if is_exe && self.data.umu.enabled {
+                        child = launch_local_umu(p, &game.args, &self.data.umu, &game.id);
+                    } else {
+                        child = launch_local(p, &game.args);
+                    }
                 }
             }
         }
@@ -214,7 +254,7 @@ impl LaunchVaultApp {
                         ui.add_space(4.0);
                         ui.label(egui::RichText::new("LaunchVault").size(22.0).strong());
                         ui.colored_label(
-                            egui::Color32::from_rgb(100, 180, 255),
+                            ui.visuals().hyperlink_color,
                             egui::RichText::new("персональный игровой центр").small().weak(),
                         );
                     });
@@ -344,12 +384,14 @@ impl LaunchVaultApp {
 
     fn game_card(&mut self, ui: &mut egui::Ui, game: &Game) {
         let selected = self.selected.as_deref() == Some(&game.id);
+        let visuals = ui.visuals();
+        let fill = if selected {
+            visuals.selection.bg_fill.gamma_multiply_u8(70)
+        } else {
+            visuals.faint_bg_color
+        };
         let frame = egui::Frame::NONE
-            .fill(if selected {
-                egui::Color32::from_rgb(40, 45, 70)
-            } else {
-                egui::Color32::from_gray(24)
-            })
+            .fill(fill)
             .corner_radius(10.0)
             .inner_margin(egui::Margin::same(10));
         frame.show(ui, |ui| {
@@ -590,12 +632,122 @@ impl LaunchVaultApp {
         ui.heading("Настройки");
         ui.add_space(6.0);
         egui::CollapsingHeader::new("Внешний вид").show(ui, |ui| {
-            if ui.checkbox(&mut self.dark_mode, "Тёмная тема").changed() {
-                if self.dark_mode {
-                    ui.ctx().set_visuals(egui::Visuals::dark());
-                } else {
-                    ui.ctx().set_visuals(egui::Visuals::light());
+            let mut theme = self.theme_kind();
+            let mut changed = false;
+            egui::ComboBox::from_label("Тема")
+                .selected_text(theme.label())
+                .show_ui(ui, |ui| {
+                    for t in ThemeKind::all() {
+                        if ui.selectable_value(&mut theme, t, t.label()).changed() {
+                            changed = true;
+                        }
+                    }
+                });
+            ui.horizontal(|ui| {
+                ui.label("Предпросмотр:");
+                ui.label(
+                    egui::RichText::new(self.preset().label())
+                        .color(theme::accent_color(self.preset())),
+                );
+            });
+            if ui.checkbox(&mut self.data.dark_mode, "Тёмная тема").changed() {
+                changed = true;
+            }
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new(
+                    "Авто: GNOME → Adwaita, KDE → Breeze, Windows 11 → Mica.",
+                )
+                .weak()
+                .small(),
+            );
+            if changed {
+                self.data.theme = theme.name().to_string();
+                self.apply_theme(ui.ctx());
+                self.save();
+            }
+        });
+        egui::CollapsingHeader::new("UMU / Proton").show(ui, |ui| {
+            ui.label(
+                "Запуск Windows-игр (.exe) через umu-launcher и Proton — как в Steam, но вне Steam.",
+            );
+            ui.add_space(6.0);
+            if ui
+                .checkbox(&mut self.data.umu.enabled, "Использовать UMU для .exe-игр")
+                .changed()
+            {
+                self.save();
+            }
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label("umu-run:");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.data.umu.umu_run)
+                        .hint_text("umu-run")
+                        .desired_width(280.0),
+                );
+                if ui.button("Найти").clicked() {
+                    if let Some(p) = find_umu_run() {
+                        self.data.umu.umu_run = p.to_string_lossy().to_string();
+                        self.save();
+                    }
                 }
+            });
+            ui.horizontal(|ui| {
+                ui.label("Proton:");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.data.umu.proton_path)
+                        .hint_text("путь к Proton (или GE-Proton)")
+                        .desired_width(280.0),
+                );
+                if ui.button("Найти").clicked() {
+                    if let Some(p) = find_proton_root() {
+                        self.data.umu.proton_path = p.to_string_lossy().to_string();
+                        self.save();
+                    }
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("STORE:");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.data.umu.store)
+                        .hint_text("steam / egs / none")
+                        .desired_width(280.0),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("GAMEID:");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.data.umu.game_id)
+                        .hint_text("пусто = сгенерировать автоматически")
+                        .desired_width(280.0),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("WINEPREFIX:");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.data.umu.wineprefix)
+                        .hint_text("пусто = ~/Games/umu/<GAMEID>")
+                        .desired_width(280.0),
+                );
+            });
+            let cfg = &self.data.umu;
+            ui.add_space(6.0);
+            ui.label(
+                egui::RichText::new(format!(
+                    "Команда: {} {} {}",
+                    cfg.umu_run.trim(),
+                    match cfg.proton_path.trim() {
+                        "" => "<PROTON>".to_string(),
+                        p => p.to_string(),
+                    },
+                    "<игра.exe>"
+                ))
+                .weak()
+                .small(),
+            );
+            if ui.button("Сохранить").clicked() {
+                self.save();
             }
         });
         egui::CollapsingHeader::new("Steam").show(ui, |ui| {
@@ -801,7 +953,9 @@ impl LaunchVaultApp {
 }
 
 impl eframe::App for LaunchVaultApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.maybe_apply_mica(frame);
+
         let time = ui.ctx().input(|i| i.time);
         if time - self.last_save > 30.0 {
             self.last_save = time;
@@ -825,6 +979,22 @@ impl eframe::App for LaunchVaultApp {
         }
         if self.confirm_kill.is_some() {
             self.show_confirm_kill(ui);
+        }
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        #[cfg(target_os = "windows")]
+        {
+            let c = if self.data.dark_mode {
+                egui::Color32::from_rgba_unmultiplied(32, 32, 32, 0)
+            } else {
+                egui::Color32::from_rgba_unmultiplied(0, 0, 0, 0)
+            };
+            return c.to_normalized_gamma_f32();
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            egui::Color32::from_rgb(12, 12, 12).to_normalized_gamma_f32()
         }
     }
 
