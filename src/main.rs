@@ -27,6 +27,7 @@ fn main() -> eframe::Result {
         .init();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
+            .with_app_id("launchvault")
             .with_title("LaunchVault")
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([900.0, 600.0])
