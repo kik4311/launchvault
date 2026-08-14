@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libglib2.0-dev \
+            libgdk-pixbuf-2.0-dev pkg-config
+      - name: Build
+        run: cargo build --release
+      - name: Create deb
+        uses: kornelski/cargo-deb@v1
+        with:
+          no-build: true
+          output: target/debian
+      - name: Create rpm
+        run: cargo generate-rpm
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            target/debian/*.deb
+            target/generate-rpm/*.rpm
+            target/release/launchvault
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-rust
+            mingw-w64-x86_64-gtk4
+            mingw-w64-x86_64-libadwaita
+            mingw-w64-x86_64-pkg-config
+      - name: Install cargo-wix
+        run: cargo install cargo-wix
+      - name: Build
+        run: cargo build --release
+      - name: Create MSI
+        run: |
+          $env:VERSION = (Select-String -Pattern '^version\s*=' Cargo.toml).Matches.Groups[1].Value
+          sed "s/Version=\"0.1.0\"/Version=\"$env:VERSION\"/" wix/main.wxs > target/wix-main.wxs
+          wixl target/wix-main.wxs -o target/release/launchvault.msi
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: target/release/launchvault.msi
+
+  release:
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+          path: dist/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-packages
+          path: dist/windows
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/linux/*.deb
+            dist/linux/*.rpm
+            dist/linux/launchvault
+            dist/windows/launchvault.msi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
