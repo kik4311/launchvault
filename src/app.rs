@@ -37,6 +37,7 @@ pub struct LaunchVaultApp {
     confirm_kill: Option<String>,
     steam_games: Vec<SteamGame>,
     steam_error: Option<String>,
+    steam_logos_queued: HashSet<u64>,
     last_save: f64,
     dark_mode: bool,
 }
@@ -72,8 +73,27 @@ impl LaunchVaultApp {
             confirm_kill: None,
             steam_games,
             steam_error,
+            steam_logos_queued: HashSet::new(),
             last_save: 0.0,
             dark_mode: true,
+        }
+    }
+
+    fn queue_steam_logos(&mut self, ctx: &egui::Context) {
+        let ctx = ctx.clone();
+        let appids: Vec<u64> = self
+            .steam_games
+            .iter()
+            .map(|g| g.appid)
+            .filter(|id| !self.steam_logos_queued.contains(id) && !logo_local_path(*id).exists())
+            .collect();
+        for id in appids {
+            self.steam_logos_queued.insert(id);
+            let ctx = ctx.clone();
+            std::thread::spawn(move || {
+                let _ = download_logo(id);
+                ctx.request_repaint();
+            });
         }
     }
 
@@ -337,7 +357,19 @@ impl LaunchVaultApp {
                 None => Self::placeholder_cover(ui, &game.name, egui::vec2(250.0, 100.0)),
             }
             ui.add_space(6.0);
-            ui.label(egui::RichText::new(&game.name).strong().size(14.0));
+            ui.horizontal(|ui| {
+                if let Some(appid) = game.steam_id {
+                    let logo = logo_local_path(appid);
+                    if logo.exists() {
+                        ui.add(
+                            egui::Image::from_uri(format!("file://{}", logo.display()))
+                                .maintain_aspect_ratio(true)
+                                .max_height(24.0),
+                        );
+                    }
+                }
+                ui.label(egui::RichText::new(&game.name).strong().size(14.0));
+            });
             ui.label(egui::RichText::new(game.playtime_readable()).weak().small());
             ui.horizontal(|ui| {
                 if ui.button("Запуск").clicked() {
@@ -369,6 +401,16 @@ impl LaunchVaultApp {
                 ui.horizontal(|ui| {
                     if ui.button("Назад").clicked() {
                         self.selected = None;
+                    }
+                    if let Some(appid) = game.steam_id {
+                        let logo = logo_local_path(appid);
+                        if logo.exists() {
+                            ui.add(
+                                egui::Image::from_uri(format!("file://{}", logo.display()))
+                                    .maintain_aspect_ratio(true)
+                                    .max_height(32.0),
+                            );
+                        }
                     }
                     ui.heading(&game.name);
                 });
@@ -478,6 +520,7 @@ impl LaunchVaultApp {
             .map(|g| g.id.clone())
             .collect();
         let games = self.steam_games.clone();
+        self.queue_steam_logos(ui.ctx());
 
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
@@ -486,16 +529,15 @@ impl LaunchVaultApp {
                     let id = format!("steam-{}", sg.appid);
                     let added = synced.contains(&id);
                     ui.horizontal(|ui| {
-                        let path = cover_local_path(sg.appid, &sg.name);
-                        if path.exists() {
+                        let logo = logo_local_path(sg.appid);
+                        if logo.exists() {
                             ui.add(
-                                egui::Image::from_uri(format!("file://{}", path.display()))
+                                egui::Image::from_uri(format!("file://{}", logo.display()))
                                     .maintain_aspect_ratio(true)
-                                    .max_size(egui::vec2(140.0, 40.0))
-                                    .corner_radius(4),
+                                    .max_height(28.0),
                             );
                         } else {
-                            Self::placeholder_cover(ui, &sg.name, egui::vec2(140.0, 40.0));
+                            Self::placeholder_cover(ui, &sg.name, egui::vec2(44.0, 28.0));
                         }
                         ui.vertical(|ui| {
                             ui.label(egui::RichText::new(&sg.name).strong());

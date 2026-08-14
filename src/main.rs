@@ -10,6 +10,9 @@ use app::LaunchVaultApp;
 use eframe::egui;
 
 fn main() -> eframe::Result {
+    env_logger::Builder::from_env(env_logger::Env::default()        .default_filter_or("warn,egui_extras=trace,egui=info"))
+        .format_timestamp(None)
+        .init();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("LaunchVault")

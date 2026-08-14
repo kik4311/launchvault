@@ -130,6 +130,10 @@ pub fn cover_url(appid: u64) -> String {
     format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg")
 }
 
+pub fn logo_url(appid: u64) -> String {
+    format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/logo.png")
+}
+
 pub fn cover_local_path(appid: u64, name: &str) -> PathBuf {
     let safe: String = name
         .chars()
@@ -143,7 +147,23 @@ pub fn download_cover(appid: u64, name: &str) -> Option<PathBuf> {
     if dest.exists() {
         return Some(dest);
     }
-    let Ok(mut resp) = ureq::get(&cover_url(appid)).call() else {
+    download_file(&cover_url(appid), &dest)
+}
+
+pub fn logo_local_path(appid: u64) -> PathBuf {
+    covers_dir().join(format!("{appid}_logo.png"))
+}
+
+pub fn download_logo(appid: u64) -> Option<PathBuf> {
+    let dest = logo_local_path(appid);
+    if dest.exists() {
+        return Some(dest);
+    }
+    download_file(&logo_url(appid), &dest)
+}
+
+fn download_file(url: &str, dest: &std::path::Path) -> Option<PathBuf> {
+    let Ok(mut resp) = ureq::get(url).call() else {
         return None;
     };
     let Ok(bytes) = resp.body_mut().with_config().limit(10_000_000).read_to_vec() else {
@@ -152,8 +172,8 @@ pub fn download_cover(appid: u64, name: &str) -> Option<PathBuf> {
     if let Some(dir) = dest.parent() {
         let _ = fs::create_dir_all(dir);
     }
-    fs::write(&dest, bytes).ok()?;
-    Some(dest)
+    fs::write(dest, bytes).ok()?;
+    Some(dest.to_path_buf())
 }
 
 pub fn open_url(url: &str) {
