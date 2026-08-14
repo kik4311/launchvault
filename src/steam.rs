@@ -5,6 +5,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(target_os = "windows")]
+use winreg::enums::*;
+#[cfg(target_os = "windows")]
+use winreg::RegKey;
+
 #[derive(Debug, Clone)]
 pub struct SteamGame {
     pub appid: u64,
@@ -28,17 +33,39 @@ pub fn find_steam_root() -> Option<PathBuf> {
             return Some(p);
         }
     }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(p) = steam_path_from_registry() {
+            if p.join("steamapps").is_dir() {
+                return Some(p);
+            }
+        }
+    }
+
     let candidates = [
         dirs::home_dir().map(|h| h.join(".steam").join("steam")),
         dirs::home_dir().map(|h| h.join(".local").join("share").join("Steam")),
         dirs::home_dir().map(|h| h.join("snap").join("steam").join("common").join(".steam").join("steam")),
         std::env::var_os("ProgramFiles(x86)").map(PathBuf::from).map(|p| p.join("Steam")),
         std::env::var_os("ProgramFiles").map(PathBuf::from).map(|p| p.join("Steam")),
+        Some(PathBuf::from("C:\\Steam")),
+        Some(PathBuf::from("D:\\Steam")),
+        Some(PathBuf::from("E:\\Steam")),
+        std::env::var_os("SystemDrive").map(PathBuf::from).map(|p| p.join("Steam")),
     ];
     candidates
         .into_iter()
         .flatten()
         .find(|p| p.join("steamapps").is_dir())
+}
+
+#[cfg(target_os = "windows")]
+fn steam_path_from_registry() -> Option<PathBuf> {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let key = hklm.open_subkey(r"SOFTWARE\WOW6432Node\Valve\Steam").ok()?;
+    let path: String = key.get_value("InstallPath").ok()?;
+    Some(PathBuf::from(path))
 }
 
 fn vdf_file(steam_root: &Path) -> PathBuf {
