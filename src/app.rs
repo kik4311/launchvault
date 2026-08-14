@@ -563,7 +563,7 @@ impl LaunchVaultApp {
                 .small(),
         );
         ui.label(
-            egui::RichText::new("© 2026 Mangokik43, kik4311 · GPL-3.0")
+            egui::RichText::new("© 2026 kik4311 · GPL-3.0")
                 .weak()
                 .small(),
         );
