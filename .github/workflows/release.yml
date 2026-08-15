@@ -14,12 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Add GTK4 PPA (4.20+)
-        run: |
-          sudo add-apt-repository -y ppa:gnome3-team/gnome46
-          sudo apt-get update
       - name: Install dependencies
         run: |
+          sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libglib2.0-dev \
             libgdk-pixbuf-2.0-dev pkg-config
       - name: Build
@@ -60,8 +57,8 @@ jobs:
         run: cargo build --release
       - name: Create MSI
         run: |
-          $env:VERSION = (Select-String -Pattern '^version\s*=' Cargo.toml).Matches.Groups[1].Value
-          sed "s/Version=\"0.1.0\"/Version=\"$env:VERSION\"/" wix/main.wxs > target/wix-main.wxs
+          VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/version *= *"\(.*\)"/\1/')
+          sed "s/Version=\"0.1.0\"/Version=\"$VERSION\"/" wix/main.wxs > target/wix-main.wxs
           wixl target/wix-main.wxs -o target/release/launchvault.msi
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
