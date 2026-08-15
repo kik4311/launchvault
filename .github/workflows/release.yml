@@ -53,19 +53,61 @@ jobs:
             mingw-w64-x86_64-gtk4
             mingw-w64-x86_64-libadwaita
             mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-msitools
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-gdk-pixbuf2
+            mingw-w64-x86_64-adwaita-icon-theme
+            mingw-w64-x86_64-hicolor-icon-theme
+            mingw-w64-x86_64-gsettings-desktop-schemas
       - name: Build
         run: cargo build --release
-      - name: Create MSI
+      - name: Collect runtime
         run: |
-          VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/version *= *"\(.*\)"/\1/')
-          sed "s/Version=\"0.1.0\"/Version=\"$VERSION\"/" wix/main.wxs > target/wix-main.wxs
-          wixl target/wix-main.wxs -o target/release/launchvault.msi
+          set -e
+          STAGE=stage
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          cp target/release/launchvault.exe "$STAGE/"
+          copy_deps() {
+            local f="$1"
+            objdump -p "$f" | grep 'DLL Name' | awk '{print $3}' | while read -r dll; do
+              if [ -f "/mingw64/bin/$dll" ] && [ ! -f "$STAGE/$dll" ]; then
+                cp "/mingw64/bin/$dll" "$STAGE/"
+                copy_deps "$STAGE/$dll"
+              fi
+            done
+          }
+          copy_deps target/release/launchvault.exe
+          PIXDIR="/mingw64/lib/gdk-pixbuf-2.0/2.10.0/loaders"
+          for loader in "$PIXDIR"/*.dll; do
+            [ -f "$loader" ] && copy_deps "$loader"
+          done
+          mkdir -p "$STAGE/share/icons" \
+                   "$STAGE/share/glib-2.0/schemas" \
+                   "$STAGE/lib/gdk-pixbuf-2.0/2.10.0/loaders"
+          cp -r /mingw64/share/icons/Adwaita "$STAGE/share/icons/"
+          cp -r /mingw64/share/icons/hicolor "$STAGE/share/icons/"
+          cp /mingw64/share/glib-2.0/schemas/gschemas.compiled "$STAGE/share/glib-2.0/schemas/"
+          cp "$PIXDIR"/*.dll "$STAGE/lib/gdk-pixbuf-2.0/2.10.0/loaders/"
+          if [ -f "/mingw64/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" ]; then
+            cp "/mingw64/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" "$STAGE/lib/gdk-pixbuf-2.0/2.10.0/"
+          fi
+          echo "staged files: $(find "$STAGE" -type f | wc -l)"
+          du -sh "$STAGE"
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches.Groups[1].Value
+          $iscc = Get-ChildItem "C:\Program Files (x86)\Inno Setup*\ISCC.exe" | Select-Object -First 1
+          if (-not $iscc) { throw "ISCC.exe not found" }
+          & $iscc.FullName "/DMyAppVersion=$ver" "installer\launchvault.iss"
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-packages
-          path: target/release/launchvault.msi
+          path: installer/output/LaunchVault-Setup.exe
 
   release:
     needs: [linux, windows]
@@ -86,6 +128,6 @@ jobs:
             dist/linux/debian/*.deb
             dist/linux/generate-rpm/*.rpm
             dist/linux/release/launchvault
-            dist/windows/launchvault.msi
+            dist/windows/LaunchVault-Setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

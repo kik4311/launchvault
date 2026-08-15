@@ -1462,7 +1462,44 @@ enum RefreshMsg {
     Logos,
 }
 
+#[cfg(target_os = "windows")]
+fn setup_windows_runtime_env() {
+    let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+    else {
+        return;
+    };
+    let maybe_set = |name: &str, path: PathBuf| {
+        if path.exists() && std::env::var_os(name).is_none() {
+            unsafe { std::env::set_var(name, path) };
+        }
+    };
+    maybe_set(
+        "GSETTINGS_SCHEMA_DIR",
+        exe_dir.join("share").join("glib-2.0").join("schemas"),
+    );
+    maybe_set(
+        "GDK_PIXBUF_MODULEDIR",
+        exe_dir
+            .join("lib")
+            .join("gdk-pixbuf-2.0")
+            .join("2.10.0")
+            .join("loaders"),
+    );
+    maybe_set(
+        "GDK_PIXBUF_MODULE_FILE",
+        exe_dir
+            .join("lib")
+            .join("gdk-pixbuf-2.0")
+            .join("2.10.0")
+            .join("loaders.cache"),
+    );
+}
+
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    setup_windows_runtime_env();
     adw::init().expect("Не удалось инициализировать libadwaita");
     let app = gtk::Application::builder()
         .application_id("org.launchvault.LaunchVault")

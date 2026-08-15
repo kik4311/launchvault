@@ -11,14 +11,6 @@ mkdir -p target/release target/debian target/generate-rpm
 echo "==> Linux бинарник (release) =="
 cargo build --release
 
-echo "==> Windows exe (MinGW кросс, нужен для MSI) =="
-cargo build --release --target x86_64-pc-windows-gnu
-cp target/x86_64-pc-windows-gnu/release/launchvault.exe target/release/launchvault.exe
-
-echo "==> MSI установщик (wixl) =="
-sed "s/Version=\"0.1.0\"/Version=\"$VERSION\"/" wix/main.wxs > target/wix-main.wxs
-wixl target/wix-main.wxs -o target/release/launchvault.msi
-
 echo "==> deb пакет =="
 cargo deb --no-build --output target/debian
 
@@ -45,5 +37,6 @@ echo
 echo "==> Готово! Артефакты:"
 ls -lh LaunchVault-x86_64.AppImage \
       target/debian/*.deb \
-      target/generate-rpm/*.rpm \
-      target/release/launchvault.msi
+      target/generate-rpm/*.rpm
+echo
+echo "Windows-установщик (Inno Setup) собирается в CI: github.com/kik4311/launchvault/actions"
