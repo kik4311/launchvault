@@ -25,6 +25,8 @@ jobs:
         run: cargo install cargo-deb
       - name: Create deb
         run: cargo deb --no-build --output target/debian
+      - name: Install cargo-generate-rpm
+        run: cargo install cargo-generate-rpm
       - name: Create rpm
         run: cargo generate-rpm
       - name: Upload Linux artifacts
@@ -51,13 +53,11 @@ jobs:
             mingw-w64-x86_64-gtk4
             mingw-w64-x86_64-libadwaita
             mingw-w64-x86_64-pkg-config
-      - name: Install cargo-wix
-        run: cargo install cargo-wix
+            mingw-w64-x86_64-msitools
       - name: Build
         run: cargo build --release
       - name: Create MSI
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
           VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/version *= *"\(.*\)"/\1/')
           sed "s/Version=\"0.1.0\"/Version=\"$VERSION\"/" wix/main.wxs > target/wix-main.wxs
           wixl target/wix-main.wxs -o target/release/launchvault.msi
