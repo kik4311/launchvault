@@ -83,9 +83,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/linux/*.deb
-            dist/linux/*.rpm
-            dist/linux/launchvault
+            dist/linux/debian/*.deb
+            dist/linux/generate-rpm/*.rpm
+            dist/linux/release/launchvault
             dist/windows/launchvault.msi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
