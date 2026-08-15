@@ -29,7 +29,7 @@ uuid = { version = "1.24.0", features = ["v4", "serde"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
-adw = { package = "libadwaita", version = "0.9", features = ["v1_8"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.54"

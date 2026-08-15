@@ -57,6 +57,7 @@ jobs:
         run: cargo build --release
       - name: Create MSI
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/version *= *"\(.*\)"/\1/')
           sed "s/Version=\"0.1.0\"/Version=\"$VERSION\"/" wix/main.wxs > target/wix-main.wxs
           wixl target/wix-main.wxs -o target/release/launchvault.msi
