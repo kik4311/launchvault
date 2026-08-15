@@ -14,9 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Add GTK4 PPA (4.20+)
+        run: |
+          sudo add-apt-repository -y ppa:gnome3-team/gnome46
+          sudo apt-get update
       - name: Install dependencies
         run: |
-          sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libglib2.0-dev \
             libgdk-pixbuf-2.0-dev pkg-config
       - name: Build
@@ -51,7 +54,8 @@ jobs:
             mingw-w64-x86_64-gtk4
             mingw-w64-x86_64-libadwaita
             mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-wixl
+      - name: Install cargo-wix
+        run: cargo install cargo-wix
       - name: Build
         run: cargo build --release
       - name: Create MSI
